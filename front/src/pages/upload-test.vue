@@ -4,7 +4,7 @@
       v-model="courseUrl"
       accept="video/*"
       :limit="1"
-      type="picture-card"
+      listType="picture-card"
     ></large-file-upload>
   </div>
 </template>

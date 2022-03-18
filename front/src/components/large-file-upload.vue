@@ -237,7 +237,7 @@ export default {
             formData.append('type', 0) // 0: 上传切片  1：合并切片
             api.uploadSlice(formData, { abortEnabled: true }).then(res => {
               if (res.data.code == 1) {
-                max++ // 释放通道
+                max++ // 释放资源
                 counter++
                 fileChunk.status = 'success' // 更新单个切片的状态
                 this.updateSliceUploadRecord(fileId, fileChunk.index) // 每个切片上传完都要更新一下切片记录
@@ -247,7 +247,7 @@ export default {
               }
             }).catch(() => {
               fileChunk.status = 'fail'
-              // 触发重试机制
+              // 失败重传
               if (typeof retryArr[fileChunk.index] !== 'number') {
                 retryArr[fileChunk.index] = 0
               }
@@ -257,7 +257,7 @@ export default {
               if (retryArr[fileChunk.index] >= retry) {
                 return reject()
               }
-              // 释放当前占用的通道，但是counter不累加
+              // 释放当前占用的资源，但是counter不累加
               max++
               request()
             })
@@ -448,13 +448,12 @@ export default {
     .el-icon-upload {
       font-size: 67px;
       color: #c0c4cc;
-      margin: 40px 0 16px;
-      line-height: 50px;
     }
-    p {
+    span {
       line-height: 30px;
       margin: 0;
       padding: 0;
+      color: #666;
     }
   }
   .i-upload__input {
