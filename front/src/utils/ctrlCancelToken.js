@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const cancelTokenMap = Object.create(null)
+const cancelTokenMap = Object.create(null) // 声明一个变量用于存储每个ajax请求的取消函数和ajax标识
 let id = 0
 
 export function addCancelToken(axiosConfig) {

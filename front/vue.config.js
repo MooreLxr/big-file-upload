@@ -20,7 +20,7 @@ module.exports = {
     // open: true, //配置自动启动浏览器
     proxy: {
       '^/api/': {
-        target: 'http://10.193.20.111:8088/',
+        target: 'http://10.193.20.111:3000/',
         changeOrigin: true,
         pathRewrite: {
           '^/api/': ''

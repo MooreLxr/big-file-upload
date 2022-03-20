@@ -201,7 +201,11 @@ export default {
           this.handleUploadPause() // 有部分请求失败，将请求停掉
         })
     },
-    // 限制请求并发数
+    /** 限制请求并发数
+    * @params fileChunkList:切片
+    * @params MAX_REQUEST_NUM：最大并发数
+    * @params MAX_RETRY_NUM：切片失败重传次数
+    */
     requestWithLimit (
       fileChunkList,
       max = MAX_REQUEST_NUM,
@@ -246,8 +250,8 @@ export default {
                 else request()
               }
             }).catch(() => {
-              fileChunk.status = 'fail'
               // 失败重传
+              fileChunk.status = 'fail'
               if (typeof retryArr[fileChunk.index] !== 'number') {
                 retryArr[fileChunk.index] = 0
               }
@@ -327,7 +331,7 @@ export default {
       if (this.isPause) this.handleUploadPause()
       else this.handleUploadContinue()
     },
-    // 暂停上传
+    // 暂停上传（取消所有axios请求）
     handleUploadPause () {
       removeAllCancelToken(true)
     },
