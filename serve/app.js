@@ -19,8 +19,8 @@ app.use(logger('dev'))
 app.use(cookieParser())
 app.use(express.static(path.join(__dirname, 'public')))
 //服务器提交的数据json化
+app.use(bodyParser.urlencoded({ extended: false }))
 app.use(bodyParser.json())
-app.use(bodyParser.urlencoded({extended: true}))
 
 app.use('/', indexRouter)
 
