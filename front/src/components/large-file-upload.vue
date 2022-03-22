@@ -238,7 +238,6 @@ export default {
             formData.append('file', fileChunk.file)
             formData.append('fileId', fileId) // 文件唯一标识
             formData.append('fileIndex', fileChunk.index) // 切片索引
-            formData.append('type', 0) // 0: 上传切片  1：合并切片
             api.uploadSlice(formData, { abortEnabled: true }).then(res => {
               if (res.data.code == 1) {
                 max++ // 释放资源
@@ -277,10 +276,9 @@ export default {
       const { fileSlices } = this
       const formData = new FormData()
       formData.append('fileId', fileId) // 文件唯一标识
-      formData.append('type', 1) // 0: 上传切片  1：合并切片
       formData.append('suffix', fileName.slice(fileName.indexOf('.'))) // 文件后缀
       formData.append('size', fileSlices.length) // 切片数量
-      api.uploadSlice(formData).then(res => {
+      api.combineSlice(formData).then(res => {
         if (res.data.code == 1) {
           this.$message({
             type: 'success',

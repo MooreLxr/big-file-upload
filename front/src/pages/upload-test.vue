@@ -16,6 +16,7 @@
 * @description 
 */
 import largeFileUpload from '@/components/large-file-upload'
+import * as api from '@/api/index'
 export default {
   name: 'upload-test',
   components: { largeFileUpload },

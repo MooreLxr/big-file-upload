@@ -6,10 +6,15 @@ import {
 } from './ctrlCancelToken'
 
 // 创建axios实例
+let baseUrl = '/api'
+if (process.env.NODE_ENV === 'production') {
+  baseUrl = '/'
+}
 const service = axios.create({
-  baseURL: process.env.BASE_API, // api 的 base_url
   timeout: 120000, // 请求超时时间
-  withCredentials: true
+  headers: { 'X-Requested-With': 'XMLHttpRequest' },
+  withCredentials: true,
+  baseURL: baseUrl // api 的 base_url
 })
 
 // request拦截器
