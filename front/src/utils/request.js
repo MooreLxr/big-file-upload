@@ -42,7 +42,14 @@ service.interceptors.response.use(
       removeCancelToken(response.config)
       return response
     } else {
-      return Promise.reject(res) 
+      if (res.message) {
+        Message({
+          message: res.message,
+          type: 'error',
+          duration: 2000
+        })
+      }
+      return Promise.reject(res)
     }
   },
   error => {

@@ -1,6 +1,7 @@
 const fs = require('fs')
 const multer = require('multer')
 
+// 递归创建目录  同步方法
 const mkdirsSync = (dirname) => {
   if(fs.existsSync(dirname)) {
     return true
@@ -33,5 +34,5 @@ const uploadFileFn = (file, uploadDir, fileName) => {
 }
 
 module.exports = {
-  uploadFileFn
+  mkdirsSync
 }
