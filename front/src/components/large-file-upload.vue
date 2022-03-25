@@ -63,11 +63,11 @@
           @click="handlePlayOrPause"
           :title="`${isPause ? '开始' : '暂停'}`"
         ></i>
-        <!-- <i
+        <i
           class="el-icon-menu"
           @click="detaiVisible = !detaiVisible"
           title="查看切片状态"
-        ></i> -->
+        ></i>
       </div>
     </div>
 
