@@ -14,8 +14,9 @@ router.get('/', function(req, res, next) {
  * 上传切片
  * file:文件流  fileId:文件id  fileIndex:切片索引
  */
-let uploadDir = './public/upload_files/'
+
 router.post('/uploadSlice', (req, res, next) => {
+  let uploadDir = './public/upload_files/'
   const form = new multiparty.Form()
   form.encoding = 'utf-8'
   form.uploadDir = uploadDir //设置文件存储路径
@@ -32,8 +33,8 @@ router.post('/uploadSlice', (req, res, next) => {
       return false
     } else {
       const { fileId, fileIndex } = fields
-      uploadDir = path.join(uploadDir, fileId[0], '/') // 切片上传至以fileId命名的文件夹中
-      if(!fs.existsSync(uploadDir)) mkdirsSync(uploadDir) // 创建上传目录
+      uploadDir = path.join(uploadDir, fileId[0], '/')
+      mkdirsSync(uploadDir) // 创建以fileId命名的文件夹, 切片转移至该文件夹中
       const oldChunkName = files.file[0].path
       const newChunkName = uploadDir + 'chunk_' + fileIndex[0] // 切片名称
       //重命名为真实文件名
@@ -46,7 +47,7 @@ router.post('/uploadSlice', (req, res, next) => {
           })
         } else {
           res.json({
-            data: chunkName,
+            data: newChunkName,
             message: '上传成功',
             code: 1
           })
@@ -62,7 +63,7 @@ router.post('/uploadSlice', (req, res, next) => {
  */
 router.post('/combineSlice', (req, res, next) => {
   // const { fileId, suffix, size } = req.body
-  console.log('----', req)
+  // console.log('----', req)
 
   res.json({
     data: '',
