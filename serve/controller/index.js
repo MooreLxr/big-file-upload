@@ -17,10 +17,9 @@ const mkdirsSync = (dirname) => {
  * 合并文件
  * @param sourceDir 切片文件夹
  * @param filePath 目标文件
- * @param fileId 文件id
  * @param total 切片总数
  */
-const mergeFile = (sourceDir, filePath, fileId, total) => {
+const mergeFile = (sourceDir, filePath, total) => {
   return new Promise((resolve, reject) => {
     fs.readdir(sourceDir, (err, files) => {
       if (files.length !== total) {

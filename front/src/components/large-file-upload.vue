@@ -102,7 +102,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { removeAllCancelToken } from '@/utils/ctrlCancelToken'
 const MAX_REQUEST_NUM = 6 // 最大并发数
 const MAX_RETRY_NUM = 3 // 切片上传失败重试次数
-const piece_size = 1024 * 1024 * 5 // 切片大小
+const piece_size = 1024 * 1024 * 1 // 切片大小
 
 export default {
   name: 'large-file-upload',
@@ -274,18 +274,20 @@ export default {
       console.warn('上传完成，正在合并切片......')
       const { fileId, fileName } = this.fileInfo
       const { fileSlices } = this
-      const formData = new FormData()
-      formData.append('fileId', fileId) // 文件唯一标识
-      formData.append('suffix', fileName.slice(fileName.indexOf('.'))) // 文件后缀
-      formData.append('size', fileSlices.length) // 切片数量
-      api.combineSlice(formData).then(res => {
+      const sendData = {
+        fileId, // 文件唯一标识
+        fileName, // 文件名
+        suffix: fileName.slice(fileName.indexOf('.')), // 文件后缀
+        size: fileSlices.length // 切片数量
+      }
+      api.combineSlice(sendData).then(res => {
         if (res.data.code == 1) {
           this.$message({
             type: 'success',
             message: '上传成功',
             duration: 1500
           })
-          const result = res.data.object && res.data.object.fileName
+          const result = res.data && res.data.fileName
           this.$emit('onSuccess', result)
           this.setProgressPercentage()
           this.finishUpload = true

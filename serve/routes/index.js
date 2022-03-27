@@ -4,6 +4,7 @@ const path = require('path')
 const fs = require('fs')
 const multiparty = require('multiparty')
 const { mkdirsSync, mergeFile } = require('../controller/index')
+const UPLOAD_DIR = './public/upload_files/'
 
 /* GET home page. */
 router.get('/', function(req, res, next) {
@@ -16,12 +17,11 @@ router.get('/', function(req, res, next) {
  */
 
 router.post('/uploadSlice', (req, res, next) => {
-  let uploadDir = './public/upload_files/'
   const form = new multiparty.Form()
   form.encoding = 'utf-8'
-  form.uploadDir = uploadDir //设置文件存储路径
+  form.uploadDir = UPLOAD_DIR //设置文件存储路径
   form.maxFilesSize = 10 * 1024 * 1024 // 单文件大小限制：10M
-  mkdirsSync(uploadDir) // 创建上传目录
+  mkdirsSync(UPLOAD_DIR) // 创建上传目录
   
   form.parse(req, (err, fields, files) => {
     if (err) {
@@ -33,10 +33,10 @@ router.post('/uploadSlice', (req, res, next) => {
       return false
     } else {
       const { fileId, fileIndex } = fields
-      uploadDir = path.join(uploadDir, fileId[0], '/')
-      mkdirsSync(uploadDir) // 创建以fileId命名的文件夹, 切片转移至该文件夹中
+      const chunkDir = path.join(UPLOAD_DIR, fileId[0], '/')
+      mkdirsSync(chunkDir) // 创建以fileId命名的文件夹, 切片转移至该文件夹中
       const oldChunkName = files.file[0].path
-      const newChunkName = uploadDir + 'chunk_' + fileIndex[0] // 切片名称
+      const newChunkName = chunkDir + 'chunk_' + fileIndex[0] // 切片名称
       //重命名为真实文件名
       fs.rename(oldChunkName, newChunkName, function (err) {
         if (err) {
@@ -59,17 +59,38 @@ router.post('/uploadSlice', (req, res, next) => {
 
 /**
  * 合并切片
- * fileId:文件id  suffix:后缀名  size:切片数量
+ * fileId:文件id  fileName: 文件名  suffix:后缀名  size:切片数量
  */
 router.post('/combineSlice', (req, res, next) => {
-  // const { fileId, suffix, size } = req.body
-  // console.log('----', req)
+  const { fileId, fileName, suffix, size } = req.body
+  const chunkDir = path.join(UPLOAD_DIR, fileId, '/') // 切片存放的路径
+  const destFile = path.join(UPLOAD_DIR, fileName)
 
-  res.json({
-    data: '',
-    message: '请求成功',
-    code: 0
-  })
+  if (!fs.existsSync(chunkDir)) {
+    res.json({
+      data: '',
+      message: '文件上传失败',
+      code: 0
+    })
+  } else {
+    mergeFile(chunkDir, destFile, size).then(() => {
+      res.json({
+        data: {
+          fileId,
+          fileName,
+          Url: path.join(`http://localhost:3000/${UPLOAD_DIR}`, fileName),
+        },
+        message: '文件上传成功',
+        code: 1
+      })
+    }).catch(err => {
+      res.json({
+        data: '',
+        message: err,
+        code: 0
+      })
+    })
+  }
 })
 
 module.exports = router
