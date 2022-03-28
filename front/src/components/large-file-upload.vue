@@ -76,7 +76,7 @@
       class="slice-wrap"
       ref="sliceDetailDom"
       v-if="fileSlices && fileSlices.length"
-      :style="`height: ${detaiVisible ? 'auto' : '0px'};padding:${detaiVisible ? '10px 5px' : '0px'};border:${detaiVisible ? '1px solid #ddd' : 'none'}`"
+      :style="`height: ${detaiVisible ? 'auto' : '0px'};padding:${detaiVisible ? '10px 4px' : '0px'};border:${detaiVisible ? '1px solid #ddd' : 'none'}`"
     >
       <div
         :class="['slice-item',`slice-item-status__${item.status}`]"
@@ -102,7 +102,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { removeAllCancelToken } from '@/utils/ctrlCancelToken'
 const MAX_REQUEST_NUM = 6 // 最大并发数
 const MAX_RETRY_NUM = 3 // 切片上传失败重试次数
-const piece_size = 1024 * 1024 * 1 // 切片大小
+const piece_size = 1024 * 1024 * 5 // 切片大小
 
 export default {
   name: 'large-file-upload',
@@ -220,7 +220,7 @@ export default {
           resolve() // 切片全部上传完成
           return
         }
-        const  { fileId } = this.fileInfo
+        const { fileId } = this.fileInfo
         let counter = 0 // 请求成功数量
         const retryArr = [] // 记录文件上传失败的次数
         const request = () => {

@@ -64,7 +64,7 @@ router.post('/uploadSlice', (req, res, next) => {
 router.post('/combineSlice', (req, res, next) => {
   const { fileId, fileName, suffix, size } = req.body
   const chunkDir = path.join(UPLOAD_DIR, fileId, '/') // 切片存放的路径
-  const destFile = path.join(UPLOAD_DIR, fileName)
+  const destFile = path.join(UPLOAD_DIR, fileId + '_' + fileName)
 
   if (!fs.existsSync(chunkDir)) {
     res.json({
@@ -78,7 +78,7 @@ router.post('/combineSlice', (req, res, next) => {
         data: {
           fileId,
           fileName,
-          Url: path.join(`http://localhost:3000/${UPLOAD_DIR}`, fileName),
+          Url: path.join(`http://localhost:3000/${UPLOAD_DIR}`, fileId + '_' + fileName),
         },
         message: '文件上传成功',
         code: 1
