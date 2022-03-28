@@ -15,7 +15,6 @@ router.get('/', function(req, res, next) {
  * 上传切片
  * file:文件流  fileId:文件id  fileIndex:切片索引
  */
-
 router.post('/uploadSlice', (req, res, next) => {
   const form = new multiparty.Form()
   form.encoding = 'utf-8'
@@ -59,10 +58,10 @@ router.post('/uploadSlice', (req, res, next) => {
 
 /**
  * 合并切片
- * fileId:文件id  fileName: 文件名  suffix:后缀名  size:切片数量
+ * fileId:文件id  fileName: 文件名  size:切片数量
  */
 router.post('/combineSlice', (req, res, next) => {
-  const { fileId, fileName, suffix, size } = req.body
+  const { fileId, fileName, size } = req.body
   const chunkDir = path.join(UPLOAD_DIR, fileId, '/') // 切片存放的路径
   const destFile = path.join(UPLOAD_DIR, fileId + '_' + fileName)
 

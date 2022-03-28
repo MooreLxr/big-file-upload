@@ -21,6 +21,7 @@ const mkdirsSync = (dirname) => {
  */
 const mergeFile = (sourceDir, filePath, total) => {
   return new Promise((resolve, reject) => {
+    // 读取切片存放的文件夹
     fs.readdir(sourceDir, (err, files) => {
       if (files.length !== total) {
         return reject('上传失败，切片数量不符')
@@ -28,27 +29,26 @@ const mergeFile = (sourceDir, filePath, total) => {
 
       const writeStream = fs.createWriteStream(filePath)
       function merge (i) {
-        // 判断结束
+        // 判断结束，删除切片文件夹
         if (i === total) {
           fs.rmdir(sourceDir, (err) => {
             return reject(err)
           })
           return resolve()
         }
+        // 读取切片文件，遍历切片，写入filePath目标文件
         const chunkPath = sourceDir + 'chunk_' + i
         fs.readFile(chunkPath, (err, data) => {
           if (err) {
             return reject(err)
           }
-          // 追加文件
           fs.appendFile(filePath, data, (err) => {
             if (err) {
               return reject(err)
             }
             // 删除切片
             fs.unlink(chunkPath, (err) => {
-              // 递归合并下一个切片
-              merge(++i)
+              merge(++i) // 递归合并下一个切片
             })
           })
         })

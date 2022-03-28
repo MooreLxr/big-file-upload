@@ -172,25 +172,25 @@ export default {
       this.finishUpload = false
       const file = this.$refs.inputRef.files[0]
       const fileId = this.getFileId() // 文件唯一标识名
-      const sliceUploadedRecord = this.getSliceUploadRecord(fileId) // 已上传的切片记录
-      const fileSlices = (this.fileSlices = this.createFileSlice(file, piece_size)) // 文件切片
+      this.fileSlices = this.createFileSlice(file, piece_size) // 文件切片
       this.fileInfo = {
         fileId,
         fileName: file.name,
         fileSize: file.size
       }
-      this.setProgressPercentage()
-
-      // 标记已上传的切片状态
-      fileSlices.forEach((chunk, i) => {
-        if (sliceUploadedRecord.includes(i)) {
-          chunk.status = 'success'
-        }
-      })
       this.uploadSlice()
     },
     // 上传切片
     uploadSlice () {
+      const { fileId } = this.fileInfo
+      const sliceUploadedRecord = this.getSliceUploadRecord(fileId) // 已上传的切片记录
+      // 标记已上传的切片状态
+      this.fileSlices.forEach((chunk, i) => {
+        if (sliceUploadedRecord.includes(i)) {
+          chunk.status = 'success'
+        }
+      })
+      this.setProgressPercentage()
       // 上传切片，限制最大并发请求数量
       this.requestWithLimit(this.fileSlices, MAX_REQUEST_NUM, MAX_RETRY_NUM)
         .then(() => {
@@ -233,7 +233,7 @@ export default {
               return chunk.status === 'fail' || chunk.status === 'waiting'
             })
             if (!fileChunk) return
-            fileChunk.status = 'uploading' // 状态标识要改，不然会重复请求改切片
+            fileChunk.status = 'uploading' // 状态标识要改，不然会重复请求该切片
             const formData = new FormData()
             formData.append('file', fileChunk.file)
             formData.append('fileId', fileId) // 文件唯一标识
