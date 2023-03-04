@@ -2,12 +2,12 @@
 
 【源码】：https://github.com/MooreLxr/big-file-upload
 
-## 问题描述
+## 一、问题描述
 想必大家都遇到过在上传一个大文件时，上传时间漫长，上传失败，让你重新上传！！！不能忍......
 
 传统上传文件的方式显然不适用，因此大文件上传应运而生
 
-## 一、前端实现原理
+## 二、前端实现原理
 1.文件分片：前端运用 Blob Api的 file.slice() 对大文件进行切割
 
 2.点击开始上传，计算文件md5值（spark-md5插件），发送服务端验证文件存在性
@@ -122,7 +122,7 @@ service.interceptors.response.use(
 ![App Screenshot](serve/public/images/效果2.png)
 
 
-## 二、后端实现原理：
+## 三、后端实现原理：
 后端使用的是node.js来开发
 
 ### 1.判断文件是否已存在，返回已上传的切片
