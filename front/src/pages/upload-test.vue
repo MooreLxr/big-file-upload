@@ -2,7 +2,6 @@
   <div class="upload-test">
     <large-file-upload
       v-model="courseUrl"
-      accept="video/*"
       :limit="1"
       listType="picture-card"
     ></large-file-upload>

@@ -1,7 +1,11 @@
 <template>
   <div :class="['large-file-upload', `upload--${listType}`]">
     <div>
-      <div class="upload-card" v-if="listType === 'picture-card'" @click.stop="handleClick">
+      <div
+        class="upload-card"
+        v-if="listType === 'picture-card'"
+        @click.stop="handleClick"
+      >
         <i class="el-icon-upload"></i>
         <span>点击上传</span>
       </div>
@@ -55,7 +59,7 @@
     <div class="uploading-detail" v-else>
       <div style="flex: 1;">
         <el-progress :percentage="percentage"></el-progress>
-        <!-- <div class="file-size">{{fileInfo.fileSize}}KB</div> -->
+        <div class="fileInfo">{{fileInfo.fileName}}({{fileInfo.fileSize | sizeFormat}})</div>
       </div>
       <div class="button-wrap">
         <i
@@ -75,12 +79,12 @@
     <div
       class="slice-wrap"
       ref="sliceDetailDom"
-      v-if="fileSlices && fileSlices.length"
-      :style="`height: ${detaiVisible ? 'auto' : '0px'};padding:${detaiVisible ? '10px 4px' : '0px'};border:${detaiVisible ? '1px solid #ddd' : 'none'}`"
+      v-if="fileChunks && fileChunks.length"
+      :style="uploadDetailStyle"
     >
       <div
         :class="['slice-item',`slice-item-status__${item.status}`]"
-        v-for="(item, i) in fileSlices"
+        v-for="(item, i) in fileChunks"
         :key="i"
       ></div>
     </div>
@@ -92,17 +96,14 @@
 * author lxr
 * @Date: 2022-02-24 11:05:24
 * @description 大文件上传组件
-* 支持分片上传（限制并发数）
-* 断点续传
-* 失败重传
 * <large-file-upload v-model="formData.courseUrl" accept="video/*" :limit="1"></large-file-upload>
 */
 import * as api from '@/api/index'
-import { v4 as uuidv4 } from 'uuid'
 import { removeAllCancelToken } from '@/utils/ctrlCancelToken'
+import { computeFileMD5 } from '@/utils/computeFileMD5'
 const MAX_REQUEST_NUM = 6 // 最大并发数
 const MAX_RETRY_NUM = 3 // 切片上传失败重试次数
-const piece_size = 1024 * 1024 * 5 // 切片大小
+const piece_size = 1024 * 1024 * 5 // 切片大小5M
 
 export default {
   name: 'large-file-upload',
@@ -140,9 +141,11 @@ export default {
       fileInfo: { // 待上传的文件信息
         fileId: '',
         fileName: '',
-        fileSize: 0
+        fileSize: 0,
+        uploadedChunkList: []
       },
-      fileSlices: null, // 切片
+      chunkArr: null, // 切片
+      fileChunks: null, // 切片
       percentage: 0, // 上传百分比
       isPause: false, // 是否暂停上传
       detaiVisible: false, // 是否显示每个切片的上传详情
@@ -151,12 +154,18 @@ export default {
       isMouseIn: false
     }
   },
-  created () {},
-  mounted () {},
   computed: {
     // 禁用、文件数===最大上传个数、正在上传中
     buttonDisabled () {
       return this.disabled || this.uploadedFileList.length === this.limit || !this.finishUpload
+    },
+    uploadDetailStyle() {
+      const { detaiVisible } = this
+      return {
+        height: detaiVisible ? 'auto' : '0px',
+        padding: detaiVisible ? '10px 4px' : '0px',
+        border: detaiVisible ? '1px solid #ddd' : 'none'
+      }
     }
   },
   methods: {
@@ -166,42 +175,72 @@ export default {
       inputDom.value = null
       inputDom.click()
     },
-    // 上传
+    // 1.选择文件上传
     handleUpload () {
-      // const file = e.target.files[0]
       this.finishUpload = false
+      this.percentage = 0
       const file = this.$refs.inputRef.files[0]
-      const fileId = this.getFileId() // 文件唯一标识名
-      this.fileSlices = this.createFileSlice(file, piece_size) // 文件切片
-      this.fileInfo = {
-        fileId,
-        fileName: file.name,
-        fileSize: file.size
-      }
+      this.chunkArr = this.splitFile(file, piece_size)
+      this.fileInfo.fileName = file.name
+      this.fileInfo.fileSize = file.size
       this.uploadSlice()
     },
-    // 上传切片
-    uploadSlice () {
+    // 2.文件切片
+    splitFile (file, chunkSize = 1024 * 1024 * 5) {
+      let start = 0
+      const chunkArray = []
+      while (start <= file.size) {
+        const chunk = file.slice(start, start + chunkSize)
+        chunkArray.push(chunk)
+        start += chunkSize
+      }
+      return chunkArray
+    },
+    // 3.上传切片
+    async uploadSlice () {
+      this.fileInfo.fileId = await computeFileMD5(this.chunkArr)
+      const { isExist, uploadedChunkList } = await this.verifyFileIsExist()
+      if (isExist) {
+        this.$message({
+          type: 'warning',
+          message: '服务器文件已存在，无需重复上传',
+          duration: 1500
+        })
+        this.percentage = 100
+        this.finishUpload = true
+        return
+      }
+      // 设置切片的状态
       const { fileId } = this.fileInfo
-      const sliceUploadedRecord = this.getSliceUploadRecord(fileId) // 已上传的切片记录
-      // 标记已上传的切片状态
-      this.fileSlices.forEach((chunk, i) => {
-        if (sliceUploadedRecord.includes(i)) {
-          chunk.status = 'success'
+      this.fileChunks = this.chunkArr.map((chunk, i) => {
+        return {
+          chunkId: `${fileId}-${i}`,
+          file: chunk,
+          status: uploadedChunkList.includes(`${fileId}-${i}`) ? 'success' : 'waiting' // waiting:等待、uploading:上传中, success:上传成功、fail:上传失败
         }
       })
-      this.setProgressPercentage()
-      // 上传切片，限制最大并发请求数量
-      this.requestWithLimit(this.fileSlices, MAX_REQUEST_NUM, MAX_RETRY_NUM)
+      this.fileInfo.uploadedChunkList = uploadedChunkList
+      this.setProgress()
+      // 过滤未上传的切片继续上传
+      const chunkList = this.fileChunks.filter(chunk => !uploadedChunkList.includes(chunk.chunkId))
+      this.requestWithLimit(chunkList, MAX_REQUEST_NUM, MAX_RETRY_NUM)
         .then(() => {
           this.combineSlice() // 全部上传完，合并切片
         })
         .catch(() => {
           console.warn('部分切片上传失败......')
-          this.handleUploadPause() // 有部分请求失败，将请求停掉
+          removeAllCancelToken(true) // 有部分请求失败，将请求停掉
         })
     },
-    /** 限制请求并发数
+    verifyFileIsExist() {
+      const { fileId, fileName } = this.fileInfo
+      return new Promise((resolve) => {
+        api.verifyFileIsExist({fileId, suffix: this.getSuffix(fileName)}).then(res => {
+          resolve(res.data)
+        })
+      })
+    },
+    /** 上传切片，限制请求并发数量
     * @params fileChunkList:切片
     * @params MAX_REQUEST_NUM：最大并发数
     * @params MAX_RETRY_NUM：切片失败重传次数
@@ -216,19 +255,13 @@ export default {
         const requestNum = fileChunkList.filter(fileChunk => {
           return fileChunk.status === 'fail' || fileChunk.status === 'waiting'
         }).length
-        if (requestNum === 0) {
-          resolve() // 切片全部上传完成
-          return
-        }
         const { fileId } = this.fileInfo
-        let counter = 0 // 请求成功数量
+        let counter = 0 // 上传成功数量
         const retryArr = [] // 记录文件上传失败的次数
         const request = () => {
           if (this.isPause) return // 暂停则不再上传切片
-          // max 限制了最大并发数
           while (counter < requestNum && max > 0) {
-            max--
-            // 上传状态为waiting/error的切片
+            max-- // 占用资源
             const fileChunk = fileChunkList.find(chunk => {
               return chunk.status === 'fail' || chunk.status === 'waiting'
             })
@@ -237,30 +270,28 @@ export default {
             const formData = new FormData()
             formData.append('file', fileChunk.file)
             formData.append('fileId', fileId) // 文件唯一标识
-            formData.append('fileIndex', fileChunk.index) // 切片索引
+            formData.append('chunkId', fileChunk.chunkId) // 切片id
             api.uploadSlice(formData, { abortEnabled: true }).then(res => {
-              if (res.data.code == 1) {
+              if (res.code == 1) {
                 max++ // 释放资源
-                counter++
+                counter++ // 上传成功数+1
                 fileChunk.status = 'success' // 更新单个切片的状态
-                this.updateSliceUploadRecord(fileId, fileChunk.index) // 每个切片上传完都要更新一下切片记录
-                this.setProgressPercentage()
+                this.fileInfo.uploadedChunkList.push(fileChunk.chunkId) // 更新已上传的切片记录
+                this.setProgress()
                 if (counter === requestNum) resolve() // 切片全部上传完成
                 else request()
               }
             }).catch(() => {
               // 失败重传
               fileChunk.status = 'fail'
-              if (typeof retryArr[fileChunk.index] !== 'number') {
-                retryArr[fileChunk.index] = 0
+              if (typeof retryArr[fileChunk.chunkId] !== 'number') {
+                retryArr[fileChunk.chunkId] = 0
               }
-              // 次数累加
-              retryArr[fileChunk.index]++
+              retryArr[fileChunk.chunkId]++
               // 一个请求报错超过最大重试次数
-              if (retryArr[fileChunk.index] >= retry) {
+              if (retryArr[fileChunk.chunkId] >= retry) {
                 return reject()
               }
-              // 释放当前占用的资源，但是counter不累加
               max++
               request()
             })
@@ -273,15 +304,14 @@ export default {
     combineSlice() {
       console.warn('上传完成，正在合并切片......')
       const { fileId, fileName } = this.fileInfo
-      const { fileSlices } = this
+      const { fileChunks } = this
       const sendData = {
-        fileId, // 文件唯一标识
-        fileName, // 文件名
-        suffix: fileName.slice(fileName.indexOf('.')), // 文件后缀
-        size: fileSlices.length // 切片数量
+        fileId,
+        suffix: this.getSuffix(fileName), // 文件后缀
+        size: fileChunks.length // 切片数量
       }
       api.combineSlice(sendData).then(res => {
-        if (res.data.code == 1) {
+        if (res.code == 1) {
           this.$message({
             type: 'success',
             message: '上传成功',
@@ -289,7 +319,7 @@ export default {
           })
           const result = res.data && res.data.fileName
           this.$emit('onSuccess', result)
-          this.setProgressPercentage()
+          this.setProgress()
           this.finishUpload = true
           this.uploadedFileList.push({
             name: fileName,
@@ -303,41 +333,33 @@ export default {
             duration: 1500
           })
           this.$emit('onError')
-          this.setProgressPercentage()
+          this.setProgress()
           this.finishUpload = true
           this.uploadedFileList.push({
             name: fileName,
             status: 'is-error'
           })
         }
-      }).catch(() => {
-        console.error('上传完成，合并切片失败......')
-        this.$message({
-          type: 'error',
-          message: '切片合并失败',
-          duration: 1500
-        })
-        this.$emit('onError')
-        this.setProgressPercentage()
-        this.finishUpload = true
-        this.uploadedFileList.push({
-          name: fileName,
-          status: 'is-error'
-        })
       })
     },
     handlePlayOrPause () {
       this.isPause = !this.isPause
-      if (this.isPause) this.handleUploadPause()
-      else this.handleUploadContinue()
-    },
-    // 暂停上传（取消所有axios请求）
-    handleUploadPause () {
-      removeAllCancelToken(true)
-    },
-    // 继续上传
-    handleUploadContinue () {
-      this.uploadSlice()
+      if (this.isPause) {
+        // 暂停上传（取消所有axios请求）
+        removeAllCancelToken(true)
+      } else {
+        // 继续上传
+        const { uploadedChunkList } = this.fileInfo
+        const chunkList = this.fileChunks.filter(chunk => !uploadedChunkList.includes(chunk.chunkId))
+        this.requestWithLimit(chunkList, MAX_REQUEST_NUM, MAX_RETRY_NUM)
+        .then(() => {
+          this.combineSlice() // 全部上传完，合并切片
+        })
+        .catch(() => {
+          console.warn('部分切片上传失败......')
+          removeAllCancelToken(true) // 有部分请求失败，将请求停掉
+        })
+      }
     },
     // 删除已上传的文件
     delUploadedFile (item, i) {
@@ -349,47 +371,24 @@ export default {
         this.uploadedFileList.splice(i, 1)
       }).catch(() => {})
     },
-    // 获取文件切片
-    createFileSlice (file, pieceSize = 1024 * 1024 * 5) {
-      const total = file.size
-      let start = 0
-      let end = start + pieceSize
-      let index = 0
-      const sliceArray = []
-      while (start < total) {
-        const temp = file.slice(start, end)
-        sliceArray.push({
-          file: temp,
-          index,
-          status: 'waiting' // waiting:等待、uploading:上传中, fail:上传失败、success:上传成功
-        })
-        start = end
-        end = start + pieceSize
-        index++
-      }
-      return sliceArray
-    },
-    // 获取文件id
-    getFileId () {
-      return uuidv4() // 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
-    },
-    // 获取已上传的切片记录
-    getSliceUploadRecord (fileId) {
-      const records = localStorage.getItem(fileId)
-      return records ? JSON.parse(records) : []
-    },
-    // 更新已上传的切片记录
-    updateSliceUploadRecord (fileId, sliceIndex) {
-      let records = this.getSliceUploadRecord(fileId)
-      records.push(sliceIndex)
-      localStorage.setItem(fileId, JSON.stringify(records))
-    },
     // 设置进度条百分比
-    setProgressPercentage () {
-      const { fileId } = this.fileInfo
-      const doneNum = this.getSliceUploadRecord(fileId).length
-      const total = this.fileSlices.length
+    setProgress () {
+      const { uploadedChunkList } = this.fileInfo
+      const doneNum = uploadedChunkList.length
+      const total = this.fileChunks.length
       this.percentage = total ? parseInt((doneNum / total) * 100) : 0
+    },
+    getSuffix(fileName) {
+      return fileName.slice(fileName.indexOf('.') + 1)
+    }
+  },
+  filters: {
+    sizeFormat(size) {
+      if (size === 0) return '0kb'
+      const kb = 1024
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+      const format = Math.floor(Math.log(size) / Math.log(kb))
+      return (size / Math.pow(kb, format)).toPrecision(3) + ' ' + sizes[format]
     }
   }
 }
@@ -435,8 +434,8 @@ export default {
   }
   &.upload--picture-card {
     .upload-card {
-      width: 290px;
-      height: 150px;
+      width: 365px;
+      height: 165px;
       background-color: #fff;
       border: 1px dashed #d9d9d9;
       border-radius: 6px;
@@ -464,6 +463,7 @@ export default {
     display: none;
   }
   .uploaded-list {
+    margin-top: 10px;
     .upload-list-item {
       width: 100%;
       font-size: 14px;
@@ -516,7 +516,7 @@ export default {
         margin-left: 10px;
       }
     }
-    .file-size {
+    .fileInfo {
       color: #333;
       font-size: 14px;
     }

@@ -40,7 +40,7 @@ service.interceptors.response.use(
     if (res.code === 1) {
       /** 请求成功，将 cancelToken 移除 */
       removeCancelToken(response.config)
-      return response
+      return res
     } else {
       if (res.message) {
         Message({

@@ -26,16 +26,28 @@ app.use('/', indexRouter)
 app.use(function(req, res, next) {
   next(createError(404))
 })
-
-// error handler
+// 跨域
+app.all("*", function (req, res, next) {
+  // 允许跨域的域名，*代表允许任意域名跨域
+  res.header("Access-Control-Allow-Origin", "*")
+  // 允许的 header 类型
+  res.header("Access-Control-Allow-Headers", "*")
+  // 跨域允许的请求方式 
+  res.header("Access-Control-Allow-Methods", "*")
+  next()
+})
 app.use(function(err, req, res, next) {
-  // set locals, only providing error in development
   res.locals.message = err.message
   res.locals.error = req.app.get('env') === 'development' ? err : {}
-
-  // render the error page
   res.status(err.status || 500)
   res.render('error')
+})
+// 监听3000端口
+let server = app.listen(3000, '127.0.0.1', () => {
+	let host = server.address().address // host域
+	let port = server.address().port // 端口号
+	
+	console.log(`Server running at http://${host}:${port}`)
 })
 
 module.exports = app

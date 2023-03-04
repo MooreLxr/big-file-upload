@@ -1,125 +1,75 @@
 # 大文件上传组件
 
-## 背景
-在上传大文件时，常常会出现上传一半请求超时，上传速度慢等问题，传统上传文件的方式显然不适用于上传大文件
+【源码】：https://github.com/MooreLxr/big-file-upload
 
-## 前端实现原理
-1.前端运用 Blob Api 对大文件进行文件分片切割，将一个大文件切成一个个小文件，然后将这些分片文件一个个上传。
+## 问题描述
+想必大家都遇到过在上传一个大文件时，上传时间漫长，上传失败，让你重新上传！！！不能忍......
 
-2.当前端将所有分片上传完成之后，前端再通知后端进行分片合并成文件。
+传统上传文件的方式显然不适用，因此大文件上传应运而生
 
-## 组件功能清单：
-①分片上传（限制并发数）
+## 一、前端实现原理
+1.文件分片：前端运用 Blob Api的 file.slice() 对大文件进行切割
 
-②断点续传
+2.点击开始上传，计算文件md5值（spark-md5插件），发送服务端验证文件存在性
 
-③失败重传
+3.文件秒传：如果服务器已存在该文件，则将上传结果置为成功，不存在则过滤已上传的切片，走分片上传的流程
+
+4.分片上传（实现了断点续传、失败重传）
+
+5.全部切片上传完成之后，前端通知后端进行合并文件。
 
 
 ## API Reference
 
-### 分片上传
+### 1.分片上传
 
 1.文件生成切片
 
 ```
-createFileSlice (file, pieceSize = 1024 * 1024 * 5) {
-    const total = file.size
-    let start = 0
-    let end = start + pieceSize
-    let index = 0
-    const sliceArray = []
-    while (start < total) {
-        const temp = file.slice(start, end)
-        sliceArray.push({
-          file: temp,
-          index,
-          status: 'waiting' // waiting:等待、uploading:上传中, fail:上传失败、success:上传成功
-        })
-        start = end
-        end = start + pieceSize
-        index++
-      }
-      return sliceArray
-    }
+splitFile (file, chunkSize = 1024 * 1024 * 5) {
+  let start = 0
+  const chunkArray = []
+  while (start <= file.size) {
+    const chunk = file.slice(start, start + chunkSize)
+    chunkArray.push(chunk)
+    start += chunkSize
+  }
+  return chunkArray
 }
 ```
-
-2.上传切片（并设置最大并发数）、失败重传
+2.计算md5(spark-md5插件)
 ```
-// 上传切片
-uploadSlice () {
-    // 上传切片，限制最大并发请求数量
-    this.requestWithLimit(this.fileSlices, MAX_REQUEST_NUM, MAX_RETRY_NUM)
-        .then(() => {
-          this.combineSlice() // 全部上传完，合并切片
-        })
-        .catch(() => {
-          console.warn('部分切片上传失败......')
-          this.handleUploadPause() // 有部分请求失败，将请求停掉
-        })
-    }
-}
-
-/** 限制请求并发数
-* @params fileChunkList:切片
-* @params MAX_REQUEST_NUM：最大并发数
-* @params MAX_RETRY_NUM：切片失败重传次数
-*/
-requestWithLimit (
-    fileChunkList,
-    max = MAX_REQUEST_NUM,
-    retry = MAX_RETRY_NUM
-) {
+import SparkMD5 from 'spark-md5'
+export function computeFileMD5(chunkList) {
   return new Promise((resolve, reject) => {
-    // 待上传的切片数量
-    const requestNum = fileChunkList.filter(fileChunk => {
-      return fileChunk.status === 'fail' || fileChunk.status === 'waiting'
-    }).length
-    if (requestNum === 0) {
-      resolve() // 切片全部上传完成
-      return
-    }
-    const  { fileId } = this.fileInfo
-    let counter = 0 // 请求成功数量
-    const retryArr = [] // 记录文件上传失败的次数
-    const request = () => {
-      if (this.isPause) return // 暂停则不再上传切片
-      // max 限制了最大并发数
-      while (counter < requestNum && max > 0) {
-        max--
-        // 上传状态为waiting/error的切片
-        const fileChunk = fileChunkList.find(chunk => {
-            return chunk.status === 'fail' || chunk.status === 'waiting'
-        })
-        if (!fileChunk) return
-        fileChunk.status = 'uploading' // 状态标识要改，不然会重复请求改切片
-        const formData = new FormData()
-        formData.append('file', fileChunk.file)
-        formData.append('fileId', fileId) // 文件唯一标识
-        formData.append('fileIndex', fileChunk.index) // 切片索引
-        formData.append('type', 0) // 0: 上传切片  1：合并切片
-        api.uploadSlice(formData, { abortEnabled: true }).then(res => {
-          if (res.data.code == 1) {
-            max++ // 释放资源
-            counter++
-            ...
-            if (counter === requestNum) resolve() // 切片全部上传完成
-            else request()
-          }
-        }).catch(() => {
-          // 失败重传
-          ...
-          max++
-          request()
-        })
-      }
-    }
-    request()
+    const spark = new SparkMD5.ArrayBuffer()
+    const fileReader = new FileReader()
+    // 遍历切片，生成文件md5
+    ...
   })
 }
 ```
-### 断点续传
+3.上传切片（并设置最大并发数）、文件秒传、失败重传
+```
+uploadSlice () {
+  // 计算md5，验证服务器是否存在该文件
+  const fileMd5 = await computeFileMD5(this.fileChunks)
+  const { isExist, uploadedChunkList } = await this.verifyFileIsExist()
+  // 文件秒传：已存在该文件，则不重新上传
+  // 过滤未上传的切片继续上传
+  const chunkList = this.fileChunks.filter(chunk => !uploadedChunkList.includes(chunk.chunkId))
+  this.requestWithLimit(chunkList, MAX_REQUEST_NUM, MAX_RETRY_NUM)
+    .then(() => {
+      this.combineSlice() // 全部上传完，通知服务端合并切片
+    })
+  }
+}
+```
+可以查看每个切片上传结果（绿色标识上传成功，白色标识未上传，红色标识上传失败）
+
+![App Screenshot](serve/public/images/效果3.png)
+
+### 2.断点续传（暂停上传、继续上传）
 
 暂停上传：取消当前已发送的ajax请求，并阻止继续发送新的请求
 
@@ -136,7 +86,7 @@ axios.get('/user/12345', {
 // cancel the request
 cancel();
 ```
-上面已对axios中的核心方法进行了举例，但是在实际中我们往往不会像官网例子中那样使用，更多的是在axios的拦截器中做全局配置管理
+上面已对axios中的核心方法进行举例，但实际我们不会像上面那样使用，更多的是在axios的拦截器中做全局配置管理
 
 ```
 import { addCancelToken, removeCancelToken } from '@/utils/ctrlCancelToken'
@@ -144,14 +94,12 @@ import { addCancelToken, removeCancelToken } from '@/utils/ctrlCancelToken'
 // request拦截器
 service.interceptors.request.use(
   config => {
-    // 添加 cancelToken 并保存到 config
     if (config.abortEnabled === true) {
       addCancelToken(config) // 添加取消axios请求的参数
     }
     return config
   },
   error => {
-    // Do something with request error
     Promise.reject(error)
   }
 )
@@ -159,51 +107,93 @@ service.interceptors.request.use(
 // response 拦截器
 service.interceptors.response.use(
   response => {
-    // code===1请求成功 可结合自己业务进行修改
     const res = response.data
     if (res.code === 1) {
       /** 请求成功，将 cancelToken 移除 */
       removeCancelToken(response.config)
       return response
-    } else {
-      return Promise.reject(res) 
     }
-  },
-  error => {
-    return Promise.reject(error)
   }
 )
 ```
+### 3.效果图
+![App Screenshot](serve/public/images/效果1.png)
+
+![App Screenshot](serve/public/images/效果2.png)
 
 
-## 后端实现原理：
-后端使用的是node.js来开发，对于只会前端的同学真的很快就上手了
+## 二、后端实现原理：
+后端使用的是node.js来开发
 
-### 上传切片
-这里将切片都上传至以fileId命名的文件夹中（合并的时候方便读取文件和删除切片）
-上传使用了multiparty插件
+### 1.判断文件是否已存在，返回已上传的切片
 ```
-const form = new multiparty.Form()
-form.encoding = 'utf-8'
-form.uploadDir = UPLOAD_DIR //设置文件存储路径
-form.maxFilesSize = 10 * 1024 * 1024 // 单文件大小限制：10M
-mkdirsSync(UPLOAD_DIR) // 创建上传目录
-
-form.parse(req, (err, fields, files) => {
-  if (err) {
+router.post('/verifyFile/isExist', async (req, res, next) => {
+  const { fileId, suffix } = req.body
+  const filePath = path.resolve(UPLOAD_DIR, `${fileId}.${suffix}`)
+  if (fs.existsSync(filePath)) {
     res.json({
-      data: '',
-      message: '上传失败',
-      code: 0
+      data: {
+        fileId,
+        isExist: true
+      },
+      message: '文件已存在',
+      code: 1
     })
-    return false
-  } else {
-    const { fileId, fileIndex } = fields
-    const chunkDir = path.join(UPLOAD_DIR, fileId[0], '/')
-    mkdirsSync(chunkDir) // 创建以fileId命名的文件夹, 切片转移至该文件夹中
+    return
+  }
+  // 获取已上传的切片列表
+  const chunkDir = path.resolve(UPLOAD_DIR, fileId)
+  const uploadedChunks = await getUploadedChunks(chunkDir)
+  res.json({
+    data: {
+      fileId,
+      isExist: false,
+      uploadedChunkList: uploadedChunks
+    },
+    message: '文件不存在',
+    code: 1
+  })
+})
+
+function getUploadedChunks(chunkDir) {
+  return new Promise((resolve, reject) => {
+    const isExist = fs.existsSync(chunkDir)
+    if (isExist) {
+      fs.readdir(chunkDir, (err, files) => {
+        resolve(files) // files:文件名的数组
+      })
+    } else resolve([])
+  })
+}
+```
+
+### 2.上传切片
+需要引入multiparty中间件，来解析前端传来的FormData对象数据；
+将切片都上传至以fileId命名的文件夹中
+```
+router.post('/uploadSlice', (req, res, next) => {
+  const form = new multiparty.Form()
+  form.encoding = 'utf-8'
+  form.uploadDir = UPLOAD_DIR //设置文件存储路径
+  form.maxFilesSize = 10 * 1024 * 1024 // 单文件大小限制：10M
+  mkdirsSync(UPLOAD_DIR) // 创建上传目录
+  
+  form.parse(req, (err, fields, files) => {
+    if (err) {
+      res.json({
+        data: '',
+        message: '上传失败',
+        code: 0
+      })
+      return false
+    }
+    const [fileId] = fields.fileId // 文件id
+    const [chunkId] = fields.chunkId // 切片id(文件id+切片索引)
+    const chunkDir = path.resolve(UPLOAD_DIR, fileId)
+    mkdirsSync(chunkDir) // 切片存放在fileId命名的文件夹中
     const oldChunkName = files.file[0].path
-    const newChunkName = chunkDir + 'chunk_' + fileIndex[0] // 切片名称
-    // 重命名为真实文件名
+    const newChunkName = path.resolve(chunkDir, chunkId) // 切片名称
+    //重命名为真实文件名
     fs.rename(oldChunkName, newChunkName, function (err) {
       if (err) {
         res.json({
@@ -213,47 +203,81 @@ form.parse(req, (err, fields, files) => {
         })
       } else {
         res.json({
-          data: newChunkName,
+          data: {
+            chunkId
+          },
           message: '上传成功',
           code: 1
         })
       }
     })
-  }
+  })
 })
 ```
-![App Screenshot](https://raw.githubusercontent.com/MooreLxr/big-file-upload/master/serve/public/images/效果1.png)
+![App Screenshot](serve/public/images/效果4.png)
 
-### 合并切片
-主要用到node.js的File system中的API
+### 3.合并切片
+读取文件夹，判断文件数量和前端传入的切片数是否相等，相等则合并
+合并：遍历切片，利用fs.appendFile(destFile, data, callback)逐个写入到destFile文件中
 ```
+router.post('/combineSlice', (req, res, next) => {
+  const { fileId, suffix, size } = req.body
+  const chunkDir = path.resolve(UPLOAD_DIR, fileId) // 切片存放的文件夹
+  const destFile = path.resolve(UPLOAD_DIR, `${fileId}.${suffix}`) // 最终合并切片生成的文件名
+
+  if (!fs.existsSync(chunkDir)) {
+    res.json({
+      data: '',
+      message: '文件上传失败',
+      code: 0
+    })
+    return
+  }
+  mergeFileChunk(chunkDir, destFile, size).then(() => {
+    res.json({
+      data: {
+        fileId,
+        Url: `${UPLOAD_DIR}${fileId}.${suffix}`,
+      },
+      message: '上传成功',
+      code: 1
+    })
+  }).catch(err => {
+    res.json({
+      data: '',
+      message: err,
+      code: 0
+    })
+  })
+})
 /**
  * 合并文件
- * @param sourceDir 切片文件夹
+ * @param chunkDir 切片文件夹
  * @param filePath 目标文件
  * @param total 切片总数
  */
-const mergeFile = (sourceDir, filePath, total) => {
+function mergeFileChunk(chunkDir, filePath, total) {
   return new Promise((resolve, reject) => {
     // 读取切片存放的文件夹
-    fs.readdir(sourceDir, (err, files) => {
+    fs.readdir(chunkDir, (err, files) => {
       if (files.length !== total) {
         return reject('上传失败，切片数量不符')
       }
 
       const writeStream = fs.createWriteStream(filePath)
       function merge (i) {
-        // 判断结束，删除切片文件夹
-        if (i === total) {
-          fs.rmdir(sourceDir, (err) => {
+        if (i === total) {// 判断结束，删除切片文件夹
+          fs.rmdir(chunkDir, (err) => {
             return reject(err)
           })
           return resolve()
         }
-        // 读取切片文件，遍历切片，写入filePath目标文件
-        const chunkPath = sourceDir + 'chunk_' + i
+        // 读取切片文件，写入filePath目标文件
+        const chunkPath = path.resolve(chunkDir, files[i])
         fs.readFile(chunkPath, (err, data) => {
+          if (err) return reject(err)
           fs.appendFile(filePath, data, (err) => {
+            if (err) return reject(err)
             // 删除切片
             fs.unlink(chunkPath, (err) => {
               merge(++i) // 递归合并下一个切片
@@ -266,18 +290,5 @@ const mergeFile = (sourceDir, filePath, total) => {
   })
 }
 ```
-![App Screenshot](https://raw.githubusercontent.com/MooreLxr/big-file-upload/master/serve/public/images/效果2.png)
+![App Screenshot](serve/public/images/效果5.png)
 
-## 效果图：
-
-![App Screenshot](https://raw.githubusercontent.com/MooreLxr/big-file-upload/master/front/src/assets/1.png)
-
-![App Screenshot](https://raw.githubusercontent.com/MooreLxr/big-file-upload/master/front/src/assets/2.png)
-
-![App Screenshot](https://raw.githubusercontent.com/MooreLxr/big-file-upload/master/front/src/assets/3.png)
-
-
-
-```bash
-npm run dev
-```
