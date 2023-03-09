@@ -292,3 +292,22 @@ function mergeFileChunk(chunkDir, filePath, total) {
 ```
 ![App Screenshot](serve/public/images/效果5.png)
 
+## 四、运行：
+### 运行前端项目
+```
+cd front
+npm run serve
+```
+
+### 运行后端项目
+```
+cd serve
+node app.js
+```
+
+或者使用 nodemon
+```
+npm install -g nodemon
+cd serve
+nodemon app.js
+```
